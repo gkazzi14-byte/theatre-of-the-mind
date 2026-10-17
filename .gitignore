@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.DS_Store
+private/
+audio-tool/.cache/
+audio-tool/node_modules/
+playwright-report/
+test-results/
+*.docx
+*.theatre.zip
+*.recipe.json
+*.dataset.json
+*.m4a
+*.wav
+!public/audio/*.wav

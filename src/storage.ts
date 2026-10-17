@@ -1,0 +1,5 @@
+let dbPromise:Promise<IDBDatabase>|undefined;
+function db(){return dbPromise??=new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('theatre-private',1);r.onupgradeneeded=()=>r.result.createObjectStore('items');r.onsuccess=()=>resolve(r.result);r.onerror=()=>{dbPromise=undefined;reject(r.error)};});}
+export async function get<T>(key:string):Promise<T|undefined>{const d=await db();return new Promise((resolve,reject)=>{const r=d.transaction('items').objectStore('items').get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+export async function setMany(entries:[string,unknown][]):Promise<void>{const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction('items','readwrite');for(const [key,value]of entries)tx.objectStore('items').put(value,key);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
+export async function clear():Promise<void>{const d=await db();return new Promise((resolve,reject)=>{const tx=d.transaction('items','readwrite');tx.objectStore('items').clear();tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});}
