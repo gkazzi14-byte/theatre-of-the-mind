@@ -17,6 +17,8 @@ Open the displayed local URL. Import `../Theatre-of-the-Mind-Daily-Practice.docx
 
 ## Put it on iPhone with GitHub Pages
 
+This project's hosting is configured at **https://gkazzi14-byte.github.io/theatre-of-the-mind/**. Open it in Safari and use **Share → Add to Home Screen**. Import your private packs from Files; personal content is never included in the hosted app. The steps below are for setting up another copy.
+
 1. Create a new **public** GitHub repository for the app. GitHub Free Pages hosts the empty app publicly. Personal documents and audio must never be uploaded.
 2. Upload/commit this project's source, including `public/` and `package-lock.json`. Exclude `node_modules`, `dist`, `private`, caches, and personal exports as specified in `.gitignore`. The original Word file stays in the parent directory.
 3. In repository **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**.

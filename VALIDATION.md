@@ -24,4 +24,4 @@ Verified on this Mac on 17 October 2026.
 
 Real iPhone hardware was not available. Screen-locked playback through a full session, lock-screen controls, system interruptions, power saving, storage eviction, and subjective headphone listening remain on-device acceptance checks. Desktop WebKit is not a substitute for those checks. The app uses prepared continuous media for this mode; it does not promise uninterrupted background browser TTS or playback on a powered-down phone.
 
-GitHub Pages deployment was configured and tested locally under a repository-style path, but no GitHub repository was created remotely and nothing was published.
+GitHub Pages is configured for the public app repository `gkazzi14-byte/theatre-of-the-mind`, with automatic deployment from `main`. Personal documents and audio packs are excluded from the repository. Hosting URL: https://gkazzi14-byte.github.io/theatre-of-the-mind/.
