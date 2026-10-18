@@ -17,6 +17,13 @@ export interface NativeAudioPlugin {
   addListener(event:'state',listener:(state:NativeState)=>void):Promise<PluginListenerHandle>;
 }
 const plugin=registerPlugin<NativeAudioPlugin>('TheatreAudio');
+function sessionId(){
+  // getRandomValues also works on native custom schemes where randomUUID's
+  // secure-context requirement may not be available.
+  const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const hex=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
 
 // Transfer bounded chunks. A whole session can be hundreds of MB; encoding it
 // as one base64 message would exhaust a phone's WebView memory.
@@ -58,7 +65,7 @@ export class NativeSession {
   }
   private fail(error:unknown){this.error=error instanceof Error?error:new Error(String(error));this.paused=true;this.loading=false;this.onerror?.();}
   setSource(pack:AudioPack){
-    const id=crypto.randomUUID();this.id=id;this.error=null;this.position=0;this.duration=pack.manifest.duration!;this.paused=true;this.ended=false;this.loading=true;
+    const id=sessionId();this.id=id;this.error=null;this.position=0;this.duration=pack.manifest.duration!;this.paused=true;this.ended=false;this.loading=true;
     const file=pack.manifest.audioFile||'session.m4a',timings=pack.manifest.timings||[];
     this.ready=this.listening.then(async()=>{
       const state=await transferSession(this.bridge,pack.files[file],id,file.endsWith('.wav')?'wav':'m4a',{

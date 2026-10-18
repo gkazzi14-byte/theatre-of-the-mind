@@ -15,8 +15,9 @@ control ordering, native-state changes and transfer errors. Twenty-two browser
 checks pass across Chromium and desktop WebKit (two optional personal-pack
 checks skipped), including installation guidance, standalone launch, exports,
 offline imports and simulated hidden-page continuous playback. Plist/project
-syntax checks pass. The added GitHub workflow builds an unsigned iOS Simulator
-app to check Swift and project wiring.
+syntax checks pass. The GitHub Mac workflow successfully compiled an unsigned
+iOS Simulator app. Scene startup uses the custom bridge controller that
+registers the audio plugin; native session IDs also work on custom URL schemes.
 
 This Mac has Command Line Tools, but no full Xcode or iPhone SDK. The native
 binary cannot be built or installed locally yet. Neither desktop hide events
