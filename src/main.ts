@@ -5,7 +5,6 @@ import {BrowserSpeaker, readPack,storePack,restorePack,type StoredAudioPack, typ
 import * as storage from './storage';
 import {configurePlayback} from './foreground-audio';
 import {BackgroundMusic} from './background-music';
-import {steadySession} from './steady-session';
 
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -107,7 +106,11 @@ function playPractice(){
     // the page. Switching tracks after visibilitychange would be too late.
     if(mode!=='session')setMode('session');
     configurePlayback();
-    void session.play().catch(()=>notice('Audio could not start. Tap Play to retry.'));
+    if(session.error)session.load();
+    void session.play().catch(error=>{
+      const reason=error instanceof DOMException?error.name:'PlaybackError';
+      notice(`Audio could not start (${reason}). Try the audio player’s Play control below.`);
+    });
   }else player.play();
 }
 function renderSession(){
@@ -121,24 +124,6 @@ function setupMedia(){if(!('mediaSession'in navigator))return;const media=naviga
   const actions:Partial<Record<MediaSessionAction,MediaSessionActionHandler>>={play:()=>playPractice(),pause:()=>mode==='session'?session.pause():player.pause(),seekbackward:d=>{if(mode==='session')session.currentTime=Math.max(0,session.currentTime-(d.seekOffset||15));},seekforward:d=>{if(mode==='session')session.currentTime=Math.min(session.duration||0,session.currentTime+(d.seekOffset||15));},seekto:d=>{if(mode==='session'&&d.seekTime!==undefined)session.currentTime=d.seekTime;}};
   for(const [action,fn]of Object.entries(actions))try{media.setActionHandler(action as MediaSessionAction,fn!)}catch{/* Platform dependent. */}
 }
-async function repairSession(save=false){
-  if(!voicePack||!sessionPack?.manifest.settings?.duck)return;
-  notice('Smoothing your session’s background music on this device…');
-  try{
-    const background=sessionPack.manifest.settings.background;
-    let blob:Blob|undefined;
-    if(background==='custom')blob=customMusic;
-    else if(background!=='off'){
-      if(!SOUNDS.some(sound=>sound[0]===background))throw Error('Unknown session background.');
-      const response=await fetch(`${base}audio/${background}.wav`);
-      if(!response.ok)throw Error('The background sound is unavailable.');
-      blob=await response.blob();
-    }
-    sessionPack=await steadySession(voicePack,sessionPack,blob);
-    if(save)await persist([['sessionPack',await storePack(sessionPack)]]);
-    if(!storageFailed)notice('Background music updated. Tap Play, then lock your screen whenever you like.');
-  }catch{notice('Your existing session is ready to play. Its music mix could not be updated on this device.');}
-}
 async function applyImport(){
   if(!pendingData||importing)return;importing=true;const confirm=$<HTMLButtonElement>('confirm-import');if(confirm){confirm.disabled=true;confirm.textContent='Saving on this device…';}
   try{
@@ -146,7 +131,6 @@ async function applyImport(){
   if(replacement){voicePack=undefined;sessionPack=undefined;mode='interactive';settings.section='';settings.scene='';}
   if(pendingPack?.manifest.kind==='voice')voicePack=pendingPack;
   if(pendingPack?.manifest.kind==='session')sessionPack=pendingPack;
-  await repairSession();
   speaker.pack=voicePack;normalizeSelection();contentKey='';rebuild();mountSession();render();
   const [storedVoice,storedSession]=await Promise.all([storePack(voicePack),storePack(sessionPack)]);
   await persist([['data',data],['settings',settings],['voicePack',storedVoice],['sessionPack',storedSession]]);
@@ -226,8 +210,7 @@ async function boot(){
     if(sessionPack)mode='session';
     if(c){customMusic=c;customURL=URL.createObjectURL(c);}if(settings.background==='custom'&&!c)settings.background='off';
   }catch{notice('Local storage is unavailable. You can still import and practice, but keep a backup.');}
-  await repairSession(true);
   speaker.pack=voicePack;normalizeSelection();rebuild();mountSession();render();setMode(mode);
   if('serviceWorker'in navigator&&import.meta.env.PROD){try{const updating=!!navigator.serviceWorker.controller;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(updating){reloadPending=true;maybeUpdate();}});sw=await navigator.serviceWorker.register(`${base}sw.js`);sw.addEventListener('updatefound',()=>{sw?.installing?.addEventListener('statechange',maybeUpdate)});maybeUpdate();}catch{notice('Offline installation was unavailable. Keep this page open, or reload over HTTPS.');}}
 }
-void boot();
+void boot().catch(()=>notice('The player could not finish opening. Reload the page to retry. Your saved files have not been deleted.'));

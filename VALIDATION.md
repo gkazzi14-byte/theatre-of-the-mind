@@ -1,6 +1,10 @@
 # Validation
 
-## Phone playback update — 18 October 2026
+## Startup recovery — 18 October 2026
+
+A regression test reproduced import/startup blocking when offline audio rendering never completed. Automatic session remixing has been removed from startup and import. Existing native audio is played directly, and importing a session preserves its original bytes. This addresses the reproduced blocking path; the user's exact device failure has not yet been confirmed.
+
+## Earlier phone playback update — 18 October 2026
 
 - Production build and 13 synthetic core tests passed (the optional source-document test was not run in this pass).
 - All 16 synthetic browser checks passed across Chromium and desktop WebKit. New checks cover cached byte-range responses, automatic prepared-session selection, continued native playback through simulated hide events, a single background source across narration/Next and a complete loop boundary, and automatic steady-music remix/persistence.

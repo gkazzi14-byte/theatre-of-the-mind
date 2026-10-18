@@ -72,7 +72,7 @@ AirDrop both ZIP packs to iPhone Files, then import them individually in the app
 
 Once a prepared session is imported, the ordinary player automatically uses that continuous track. There is no separate listening tab: Play/Pause, Previous/Next, Repeat and Loop control the same native audio track, and the current narration is highlighted. No background-playback setting or mode selection is required; tap Play, then lock your screen. Without a prepared session, interactive speech still pauses when hidden. Play/pause and seek are exposed through the browser's supported media controls. Timing and music are baked in, so the phone need not run background speech synthesis or JavaScript timers. Calls, power policies, memory pressure, browser versions and other media can still interrupt playback. Playback cannot continue with the phone powered down. Looping uses the media element's native loop capability and also needs a device check.
 
-Existing sessions with narration ducking are automatically remixed at steady music volume on this device when a matching voice pack and the original background are available. This repair supports sessions up to 30 minutes and is saved locally; longer sessions or sessions without source clips keep their existing audio. Changing a prepared session's voice, rate, background, mix, pauses or repeat count otherwise requires a new recipe and regeneration. Interactive controls do not alter a prepared mix. Use the ordinary player’s scrubber, Previous/Next and Repeat controls to move through the session.
+The app plays imported session audio directly; startup and import do not wait for an on-device remix or replace the original audio. Newly prepared sessions use a steady music bed. Changing a prepared session's voice, rate, background, mix, pauses or repeat count otherwise requires a new recipe and regeneration. Interactive controls do not alter a prepared mix. Use the ordinary player’s scrubber, Previous/Next and Repeat controls to move through the session.
 
 ## Privacy and storage
 
@@ -80,7 +80,7 @@ No accounts, telemetry, remote fonts, document uploads, server APIs or runtime C
 
 Browser storage may be cleared by you or the operating system. Back up JSON and keep the source Word file and audio packs. If saving fails, the app continues temporarily and tells you to export before closing. **Delete local data** removes app data and settings, not copies in Files or on the Mac. Large audio packs are limited to 600 MB; imported music to 100 MB. Replacing a pack is atomic in IndexedDB, so insufficient space preserves the previous stored copy.
 
-The service worker caches only built app assets and sounds. An update waits until practice is inactive, then activates; new page code is used on the next reload. Do not reload during playback.
+The service worker caches only built app assets and sounds. An update activates after its app files are cached, including when an old page is stuck. The page reloads to use the new code when playback is inactive. Do not reload during playback.
 
 ## Validation
 
