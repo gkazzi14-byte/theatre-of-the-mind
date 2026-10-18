@@ -3,6 +3,19 @@ import {zipSync,strToU8} from 'fflate';
 import {fingerprint,segmentsFor,defaults,type Dataset} from '../../src/model';
 import {execFileSync} from 'node:child_process';
 import {readFileSync,mkdirSync} from 'node:fs';
+test('iPhone installation explains home-screen setup and the screen-on speech limit',async({page})=>{
+  await page.addInitScript(()=>Object.defineProperty(navigator,'userAgent',{value:'iPhone Safari'}));
+  await page.goto('/theatre-test/');await page.locator('#install-app').click();
+  await expect(page.locator('#dialog')).toContainText('Add to Home Screen');
+  await expect(page.locator('#dialog')).toContainText('Open as Web App');
+  await expect(page.locator('#dialog')).toContainText('Live system speech needs the screen to stay on');
+  await page.locator('#close-dialog').click();await page.locator('#demo').click();
+  await expect(page.locator('#engine-label')).toContainText('Screen-on speech');
+});
+test('installed web app opens without a repeated installation banner',async({page})=>{
+  await page.addInitScript(()=>Object.defineProperty(navigator,'standalone',{value:true}));
+  await page.goto('/');await expect(page.locator('#welcome')).toBeVisible();await expect(page.locator('#install-panel')).toBeHidden();
+});
 test('private sample, controls, persistence, sounds, exports and offline shell',async({page,context})=>{
   const errors:string[]=[];const external:string[]=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/^https?:/.test(r.url())&&!r.url().startsWith('http://127.0.0.1:4173'))external.push(r.url())});

@@ -10,17 +10,22 @@
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "playwright test",
     "audio:assets": "python3 scripts/soundscapes.py",
-    "prepare:audio": "node --import tsx audio-tool/prepare.mjs"
+    "prepare:audio": "node --import tsx audio-tool/prepare.mjs",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "@noble/hashes": "^2.0.1",
     "fflate": "^0.8.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@playwright/test": "^1.56.0",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^24.0.0",
     "jsdom": "^27.0.0",
-    "@types/jsdom": "^27.0.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vite": "^7.1.0"

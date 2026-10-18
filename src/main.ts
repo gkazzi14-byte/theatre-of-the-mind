@@ -6,6 +6,7 @@ import * as storage from './storage';
 import {configurePlayback} from './foreground-audio';
 import {BackgroundMusic} from './background-music';
 import {continuousSession,recipeKey} from './continuous-session';
+import {NativeSession,nativeIOS} from './native-session';
 
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -18,7 +19,8 @@ let wakeRetryAt=0;
 let sessionText=new Map<string,string>();
 let importing=false,booted=false,preparing=false;
 let preparation:AbortController|undefined,preparedKey='';
-const speaker=new BrowserSpeaker(),music=new BackgroundMusic(),session=new Audio();
+const speaker=new BrowserSpeaker(),music=new BackgroundMusic(),sessionElement=new Audio();
+const session=nativeIOS?new NativeSession():sessionElement;
 const player=new Player([],settings,speaker,refreshPlayer);
 let saving:ReturnType<typeof setTimeout>|undefined;
 const app=$('app');
@@ -27,6 +29,7 @@ app.innerHTML=`
 <main>
   <section class="intro"><span class="eyebrow">A LITTLE STILLNESS. A CLEARER PICTURE.</span><h1>Become familiar<br>with your <em>future self.</em></h1><p>Your words. Your pace. A quiet place to rehearse who you want to be.</p></section>
   <div id="notice" role="status" class="notice" hidden></div>
+  <section id="install-panel" class="install-panel panel"><div><strong>Take your practice with you.</strong><p class="fine">Add Theatre to your home screen for its own app icon and a full-screen player.</p></div><button id="install-app" class="secondary">Install app</button></section>
   <section id="welcome" class="welcome panel"><div class="welcome-symbol">✧</div><h2>Bring your practice with you.</h2><p>Import your Word document to begin. Its words stay in this browser, on this device.</p><button class="primary import-trigger">Import your practice <span>↗</span></button><p class="fine">Four-column DOCX · Theatre JSON · Prepared audio packs</p><button id="demo" class="text-button">Explore with a short sample</button></section>
   <section id="workspace" hidden>
     <div id="interactive-view">
@@ -43,11 +46,30 @@ app.innerHTML=`
 </main><input type="file" id="import-file" accept=".docx,.json,.zip" hidden><input type="file" id="music-file" accept="audio/*" hidden>
 <dialog id="dialog"><div id="dialog-content"></div><button id="close-dialog" class="secondary">Close</button></dialog>`;
 configurePlayback();
-session.controls=true;session.preload='metadata';session.setAttribute('aria-label','Prepared meditation session');$('session-audio-host').append(session);
+sessionElement.controls=true;sessionElement.preload='auto';sessionElement.setAttribute('playsinline','');sessionElement.setAttribute('aria-label','Prepared meditation session');
+if(!nativeIOS)$('session-audio-host').append(sessionElement);
+else $('session-audio-host').innerHTML='<label class="range-label">Session position <output id="native-position">0:00</output><input id="native-seek" type="range" min="0" max="1" step="0.1" value="0" aria-label="Session position"></label>';
 
 function notice(text:string){$('notice').textContent=text;$('notice').hidden=!text;}
 function modal(html:string){$('dialog-content').innerHTML=html;const d=$<HTMLDialogElement>('dialog');if(!d.open)d.showModal();}
-function download(blob:Blob,name:string){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60_000);}
+type InstallPrompt=Event&{prompt:()=>Promise<void>;userChoice:Promise<{outcome:string}>};
+let installPrompt:InstallPrompt|undefined;
+const standalone=matchMedia('(display-mode: standalone)');
+function refreshInstall(){
+  $('install-panel').hidden=nativeIOS||standalone.matches||(navigator as Navigator&{standalone?:boolean}).standalone===true;
+}
+refreshInstall();standalone.addEventListener('change',refreshInstall);
+window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event as InstallPrompt;});
+window.addEventListener('appinstalled',()=>{installPrompt=undefined;$('install-panel').hidden=true;});
+$('install-app').onclick=async()=>{
+  if(installPrompt){const prompt=installPrompt;installPrompt=undefined;await prompt.prompt();if((await prompt.userChoice).outcome==='accepted')$('install-panel').hidden=true;return;}
+  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  modal(`<h2>Your own Theatre app</h2>${ios?'<ol><li>Open this page in <strong>Safari</strong>.</li><li>Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>. If needed, look under More.</li><li>Keep <strong>Open as Web App</strong> enabled if offered, then tap <strong>Add</strong>.</li><li>Launch <strong>Theatre</strong> from your home screen and import your audio pack there.</li></ol>':'<p>Open your browser’s menu and choose <strong>Install app</strong> or <strong>Add to Home Screen</strong>. On Mac Safari use <strong>File → Add to Dock</strong>.</p>'}<p>The installed web app has its own icon and opens full screen. Its saved practice may be separate from this browser; keep your original packs in Files.</p><p>For listening while locked, import a <strong>voice or session pack</strong> and wait until Play is ready. Live system speech needs the screen to stay on.</p>`);
+};
+function download(blob:Blob,name:string){
+  if(session instanceof NativeSession){const native=session;void (async()=>native.share(name,blob.type==='application/json'?await blob.text():undefined))().catch(error=>notice(`The file could not be shared. ${error.message}`));return;}
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60_000);
+}
 function jsonDownload(value:unknown,name:string){download(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}),name);}
 async function persist(entries:[string,unknown][]){try{await storage.setMany(entries);storageFailed=false;}catch{storageFailed=true;notice('Storage is unavailable or full. Your current practice works temporarily; export a backup before closing this page.');}}
 function saveSettings(){clearTimeout(saving);saving=setTimeout(()=>{void persist([['settings',settings]]);if(booted)void prepareContinuous();},350);}
@@ -84,15 +106,16 @@ function refreshPlayer(){
   $('progress-fill').style.width=`${player.units.length?(player.index+1)/player.units.length*100:0}%`;
   const labels={ready:'Take a breath. Begin when you’re ready.',speaking:`Listening · reading ${player.repeat+1} of ${settings.repeats}`,visualizing:'Hold the picture. Let the feeling follow.',paused:'Paused. Your place is saved.',waiting:'Stay with the picture. Tap Next when you’re ready.',completed:'Practice complete. Carry this feeling with you.',error:player.message};
   $('player-status').textContent=sessionPack?(session.ended?'Practice complete.':session.paused?'Ready when you are.':'Listening. You can lock your screen.') :labels[player.phase];$('countdown').hidden=player.phase!=='visualizing';$('countdown').textContent=`${Math.ceil(player.remaining)}s`;
-  $('play').textContent=preparing?'Preparing audio…':sessionPack?(session.paused?'▶ Play':'Ⅱ Pause'):player.active?'Ⅱ Pause':player.phase==='paused'?'▶ Resume':player.phase==='error'?'↻ Retry':'▶ Play';
-  $<HTMLButtonElement>('previous').disabled=player.index===0;$<HTMLButtonElement>('next').disabled=player.index>=player.units.length-1;$<HTMLButtonElement>('play').disabled=preparing||(!player.unit&&!sessionPack);
+  const loading=preparing||(session instanceof NativeSession&&session.loading);
+  $('play').textContent=loading?'Preparing audio…':sessionPack?(session.paused?'▶ Play':'Ⅱ Pause'):player.active?'Ⅱ Pause':player.phase==='paused'?'▶ Resume':player.phase==='error'?'↻ Retry':'▶ Play';
+  $<HTMLButtonElement>('previous').disabled=player.index===0;$<HTMLButtonElement>('next').disabled=player.index>=player.units.length-1;$<HTMLButtonElement>('play').disabled=loading||(!player.unit&&!sessionPack);
   if(sessionPack){$<HTMLButtonElement>('previous').disabled=false;$<HTMLButtonElement>('next').disabled=false;}
-  const neural=segment&&speaker.pack?.manifest.clips?.[segment.id];$('engine-label').textContent=sessionPack?`${sessionPack.manifest.voice} · continuous audio · screen-off playback is automatic`:neural?`Local neural audio · ${speaker.pack!.manifest.voice}`:'On-device system speech · import a voice pack for neural narration';
+  const neural=segment&&speaker.pack?.manifest.clips?.[segment.id];$('engine-label').textContent=sessionPack?`${sessionPack.manifest.voice} · ${nativeIOS?'native iPhone player':'continuous audio'} · screen-off playback`:neural?`Local neural audio · ${speaker.pack!.manifest.voice}`:'Screen-on speech · import a voice or session pack to listen while locked';
   const shouldPlay=mode==='interactive'&&(player.active||player.phase==='waiting');
   if(!previewing){if(shouldPlay)void startMusic();else queueMicrotask(()=>{if(!previewing&&(mode!=='interactive'||(!player.active&&player.phase!=='waiting')))music.pause();maybeUpdate();});}
   music.volume=settings.musicVolume;
   if(player.active&&document.visibilityState==='visible')void acquireWake();else{wakeRetryAt=0;if(wake){void wake.release();wake=undefined;}}
-  if('mediaSession'in navigator&&mode==='interactive')navigator.mediaSession.playbackState=player.active?'playing':'paused';
+  if(!nativeIOS&&'mediaSession'in navigator&&mode==='interactive')navigator.mediaSession.playbackState=player.active?'playing':'paused';
   maybeUpdate();
 }
 async function acquireWake(){if(wake||wakePending||Date.now()<wakeRetryAt||!('wakeLock'in navigator))return;wakePending=true;wakeRetryAt=Date.now()+30_000;try{const lock=await navigator.wakeLock.request('screen');if(!player.active||document.hidden){void lock.release();return;}wake=lock;lock.addEventListener('release',()=>{if(wake===lock)wake=undefined;});}catch{/* Wake lock is optional; retry at most every 30 seconds. */}finally{wakePending=false;}}
@@ -111,10 +134,10 @@ function playPractice(){
     // the page. Switching tracks after visibilitychange would be too late.
     if(mode!=='session')setMode('session');
     configurePlayback();
-    if(session.error)session.load();
+    if(session.error){if(session instanceof NativeSession)mountSession();else session.load();}
     void session.play().catch(error=>{
       const reason=error instanceof DOMException?error.name:'PlaybackError';
-      notice(`Audio could not start (${reason}). Try the audio player’s Play control below.`);
+      notice(`Audio could not start (${reason}). ${nativeIOS?'Tap Play to retry.':'Try the audio player’s Play control below.'}`);
     });
   }else {notice('This document uses live speech. Import its voice pack once to enable continuous screen-off playback.');player.play();}
 }
@@ -122,10 +145,22 @@ function renderSession(){
   const m=sessionPack?.manifest;$('session-details').textContent=m?`${m.voice} · ${Math.round(m.duration!/60)} minutes · prepared at ${m.rate}×`:'Import a prepared session once to listen with your screen off.';
   $<HTMLButtonElement>('export-audio').disabled=!m;
   $('session-view').hidden=!m;
-  session.hidden=!m;
+  sessionElement.hidden=!m;
 }
-function mountSession(){session.pause();if(sessionURL)URL.revokeObjectURL(sessionURL);sessionURL='';session.removeAttribute('src');sessionText.clear();if(sessionPack){sessionText=new Map(segmentsFor(sessionPack.data).map(s=>[s.id,s.text]));sessionURL=URL.createObjectURL(sessionPack.files[sessionPack.manifest.audioFile||'session.m4a']);session.src=sessionURL;if(!sessionPack.manifest.generated&&voicePack)preparedKey=voicePack.manifest.fingerprint+recipeKey(settings);session.loop=!!sessionPack.manifest.settings?.loop;$<HTMLInputElement>('loop').checked=session.loop;}renderSession();}
-function setupMedia(){if(!('mediaSession'in navigator))return;const media=navigator.mediaSession;if('MediaMetadata'in window)media.metadata=new MediaMetadata({title:data?.title||'Theatre of the Mind',artist:'Theatre of the Mind',album:'Private practice',artwork:[{src:new URL(`${base}icon-512.png`,location.href).href,sizes:'512x512',type:'image/png'}]});
+function mountSession(){
+  session.pause();if(sessionURL)URL.revokeObjectURL(sessionURL);sessionURL='';sessionText.clear();
+  if(session instanceof NativeSession){if(!sessionPack)session.clear();}else session.removeAttribute('src');
+  if(sessionPack){
+    sessionText=new Map(segmentsFor(sessionPack.data).map(s=>[s.id,s.text]));
+    session.loop=!!sessionPack.manifest.settings?.loop;
+    if(session instanceof NativeSession)session.setSource(sessionPack);
+    else{sessionURL=URL.createObjectURL(sessionPack.files[sessionPack.manifest.audioFile||'session.m4a']);session.src=sessionURL;}
+    if(!sessionPack.manifest.generated&&voicePack)preparedKey=voicePack.manifest.fingerprint+recipeKey(settings);
+    $<HTMLInputElement>('loop').checked=session.loop;
+  }
+  renderSession();
+}
+function setupMedia(){if(nativeIOS||!('mediaSession'in navigator))return;const media=navigator.mediaSession;if('MediaMetadata'in window)media.metadata=new MediaMetadata({title:data?.title||'Theatre of the Mind',artist:'Theatre of the Mind',album:'Private practice',artwork:[{src:new URL(`${base}icon-512.png`,location.href).href,sizes:'512x512',type:'image/png'}]});
   const actions:Partial<Record<MediaSessionAction,MediaSessionActionHandler>>={previoustrack:()=>sessionPack?sessionUnitStart(-1):player.navigate(-1),nexttrack:()=>sessionPack?sessionUnitStart(1):player.navigate(1),stop:()=>{session.pause();player.pause();},play:()=>playPractice(),pause:()=>mode==='session'?session.pause():player.pause(),seekbackward:d=>{if(mode==='session')session.currentTime=Math.max(0,session.currentTime-(d.seekOffset||15));},seekforward:d=>{if(mode==='session')session.currentTime=Math.min(session.duration||0,session.currentTime+(d.seekOffset||15));},seekto:d=>{if(mode==='session'&&d.seekTime!==undefined)session.currentTime=d.seekTime;}};
   for(const [action,fn]of Object.entries(actions))try{media.setActionHandler(action as MediaSessionAction,fn!)}catch{/* Platform dependent. */}
 }
@@ -217,27 +252,29 @@ $('sounds').onclick=e=>{const el=(e.target as HTMLElement);const sound=el.closes
 $('favorites').onclick=()=>{favoritesOnly=!favoritesOnly;renderSounds();};$('preview-sound').onclick=()=>{if(!session.paused)session.pause();previewing=!previewing;if(previewing)void startMusic();else music.pause();$('preview-sound').textContent=previewing?'Stop preview':'Preview sound';};
 $('custom-music').onclick=()=>$<HTMLInputElement>('music-file').click();$('music-file').onchange=async()=>{const f=$<HTMLInputElement>('music-file').files?.[0];if(!f)return;if(f.size>100_000_000){notice('Choose an audio file smaller than 100 MB.');return;}customMusic=f;if(customURL)URL.revokeObjectURL(customURL);customURL=URL.createObjectURL(f);musicKey='';settings.background='custom';await persist([['customMusic',f],['settings',settings]]);renderSounds();preparedKey='';void prepareContinuous();};
 $('export-audio').onclick=()=>{if(sessionPack)download(sessionPack.files[sessionPack.manifest.audioFile||'session.m4a'],sessionPack.manifest.audioFile==='session.wav'?'theatre-session.wav':'theatre-session.m4a');};
-session.onplay=()=>{previewing=false;$('preview-sound').textContent='Preview sound';if(player.active)player.stop();music.pause();refreshPlayer();if('mediaSession'in navigator)navigator.mediaSession.playbackState='playing';};session.onpause=()=>{refreshPlayer();if('mediaSession'in navigator)navigator.mediaSession.playbackState='paused';maybeUpdate();};
+session.onplay=()=>{mode='session';previewing=false;$('preview-sound').textContent='Preview sound';if(player.active)player.stop();music.pause();refreshPlayer();if(!nativeIOS&&'mediaSession'in navigator)navigator.mediaSession.playbackState='playing';};session.onpause=()=>{refreshPlayer();if(!nativeIOS&&'mediaSession'in navigator)navigator.mediaSession.playbackState='paused';maybeUpdate();};
 session.ontimeupdate=()=>{
-  if('mediaSession'in navigator&&'setPositionState'in navigator.mediaSession&&Number.isFinite(session.duration)&&session.duration>0){try{navigator.mediaSession.setPositionState({duration:session.duration,position:Math.min(session.currentTime,session.duration),playbackRate:session.playbackRate});}catch{/* Optional lock-screen position support. */}}
+  if(!nativeIOS&&'mediaSession'in navigator&&'setPositionState'in navigator.mediaSession&&Number.isFinite(session.duration)&&session.duration>0){try{navigator.mediaSession.setPositionState({duration:session.duration,position:Math.min(session.currentTime,session.duration),playbackRate:sessionElement.playbackRate});}catch{/* Optional lock-screen position support. */}}
+  if(nativeIOS){const seek=$<HTMLInputElement>('native-seek');seek.max=String(session.duration||1);seek.value=String(session.currentTime);$('native-position').textContent=`${Math.floor(session.currentTime/60)}:${String(Math.floor(session.currentTime%60)).padStart(2,'0')}`;}
   const t=sessionPack?.manifest.timings?.find(t=>session.currentTime>=t.start&&session.currentTime<t.end);
   $('session-caption').textContent=t?sessionText.get(t.segmentId)||'':'A little space to visualize.';
   if(t){const index=player.units.findIndex(u=>u.segments.some(s=>s.id===t.segmentId));if(index>=0){player.index=index;player.part=player.units[index].segments.findIndex(s=>s.id===t.segmentId);}}
   refreshPlayer();
 };
 session.onended=()=>refreshPlayer();
-session.onerror=()=>{if(sessionPack)notice('Prepared audio could not load. Reimport the pack or export the audio for another local player.');};
+session.onerror=()=>{refreshPlayer();if(sessionPack)notice(session instanceof NativeSession?`iPhone audio could not load. ${session.error?.message||'Reimport the audio pack.'}`:'Prepared audio could not load. Reimport the pack or export the audio for another local player.');};
+if(nativeIOS)$('native-seek').oninput=()=>{session.currentTime=Number($<HTMLInputElement>('native-seek').value);};
 $('export-data').onclick=()=>data&&jsonDownload(data,'practice.dataset.json');$('prepare').onclick=prepareDialog;
 $('guidance').onclick=()=>modal(`<h2>Practice instructions</h2>${data?.guidance.map(t=>`<p>${esc(t)}</p>`).join('')||'<p>Select a scene, listen, and leave yourself time to visualize.</p>'}`);
 $('help').onclick=()=>modal(`<h2>Your private practice</h2><p>Documents, audio, and settings stay in this browser’s local storage. Clearing browser data removes them. Use Back up document and keep your original audio packs.</p><p>Local system voices are filtered using the browser’s local-service flag. Neural narration is generated on your Mac. The app makes no document uploads and includes no analytics.</p><p>The host receives ordinary requests for app files; no personal practice data is included. The app does not protect data from someone with access to your unlocked device.</p><p>Install on iPhone: open the HTTPS site in Safari → Share → Add to Home Screen. Import files through the iPhone Files picker.</p><p>Imported voice clips are automatically joined into continuous audio for screen-off listening. Imported complete sessions play directly. Live system speech requires the screen to stay on.</p><a href="${base}SETUP.html" target="_blank" rel="noopener">Full setup & preparation guide ↗</a>`);
-$('delete').onclick=()=>{modal('<h2>Delete local data?</h2><p>This removes this browser’s practice, audio packs, imported music, and preferences. It does not delete files saved in Files or on your Mac.</p><button id="confirm-delete" class="danger">Delete everything on this device</button>');$('confirm-delete').onclick=async()=>{try{stopAll();clearTimeout(saving);await storage.clear();location.reload();}catch{notice('Storage could not be cleared. Use your browser’s website-data settings.');}};};
+$('delete').onclick=()=>{modal('<h2>Delete local data?</h2><p>This removes this browser’s practice, audio packs, imported music, and preferences. It does not delete files saved in Files or on your Mac.</p><button id="confirm-delete" class="danger">Delete everything on this device</button>');$('confirm-delete').onclick=async()=>{try{stopAll();if(session instanceof NativeSession)await session.clear();clearTimeout(saving);await storage.clear();location.reload();}catch{notice('Storage could not be cleared. Use your browser’s website-data settings.');}};};
 $('demo').onclick=()=>{pendingData={version:1,title:'A moment of presence',guidance:['A short, fictional sample. Import your own document when you are ready.'],sections:[{id:'section-1',title:'Presence & intention',scenes:[{id:'scene-1',number:1,line:'I give this moment my full attention.',scenario:'A quiet morning. There is a little space before the day begins.',reaction:'See yourself set the phone down. Let your shoulders soften and take one unhurried breath.',pivot:'Feel the ease of being here, with nothing else to do just yet.'},{id:'scene-2',number:2,line:'I begin with one small, deliberate action.',scenario:'Something meaningful is waiting for your attention.',reaction:'See yourself take the first simple step. There is no need to rush.',pivot:'Feel the quiet satisfaction of having begun.'}]}]};void applyImport();};
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode==='interactive'&&(player.active||previewing||!music.paused)){player.pause();music.pause();previewing=false;$('preview-sound').textContent='Preview sound';notice(sessionPack?'Tap Play to continue with your prepared session.':'Import a prepared session once to enable screen-off listening automatically.');}else if(!document.hidden)refreshPlayer();});
 window.addEventListener('pagehide',()=>{if(mode==='interactive'){player.pause();music.pause();}});
 if('speechSynthesis'in window)speechSynthesis.addEventListener('voiceschanged',renderVoices);
 let sw:ServiceWorkerRegistration|undefined,reloadPending=false;
 function maybeUpdate(){
-  if(importing||preparing||player.active||!session.paused||previewing||!music.paused)return;
+  if(importing||preparing||(session instanceof NativeSession&&session.loading)||player.active||!session.paused||previewing||!music.paused)return;
   if(reloadPending){location.reload();return;}
   if(sw?.waiting)sw.waiting.postMessage('ACTIVATE');
 }
@@ -249,6 +286,6 @@ async function boot(){
     if(c){customMusic=c;customURL=URL.createObjectURL(c);}if(settings.background==='custom'&&!c)settings.background='off';
   }catch{notice('Local storage is unavailable. You can still import and practice, but keep a backup.');}
   speaker.pack=voicePack;normalizeSelection();rebuild();mountSession();render();setMode(mode);booted=true;void prepareContinuous();
-  if('serviceWorker'in navigator&&import.meta.env.PROD){try{const updating=!!navigator.serviceWorker.controller;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(updating){reloadPending=true;maybeUpdate();}});sw=await navigator.serviceWorker.register(`${base}sw.js`);sw.addEventListener('updatefound',()=>{sw?.installing?.addEventListener('statechange',maybeUpdate)});maybeUpdate();}catch{notice('Offline installation was unavailable. Keep this page open, or reload over HTTPS.');}}
+  if(!nativeIOS&&'serviceWorker'in navigator&&import.meta.env.PROD){try{const updating=!!navigator.serviceWorker.controller;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(updating){reloadPending=true;maybeUpdate();}});sw=await navigator.serviceWorker.register(`${base}sw.js`);sw.addEventListener('updatefound',()=>{sw?.installing?.addEventListener('statechange',maybeUpdate)});maybeUpdate();}catch{notice('Offline installation was unavailable. Keep this page open, or reload over HTTPS.');}}
 }
 void boot().catch(()=>notice('The player could not finish opening. Reload the page to retry. Your saved files have not been deleted.'));

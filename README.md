@@ -2,6 +2,14 @@
 
 A static, private iPhone practice player. Import four-column Word documents, listen one sentence/cell/scene/section at a time, or play prepared meditation audio with the screen locked.
 
+The project also includes a **native iPhone app** with its own audio engine and
+lock-screen controls. See [iPhone installation](ios/README.md). Build it with
+`npm run ios:sync` and open Xcode with `npm run ios:open`. Full Xcode 26+ and
+Apple signing are required to install it on a phone. The hosted web app now has
+an **Install app** button for Home Screen installation; that installation uses
+the browser audio engine. Native playback still requires an imported voice or
+session pack. Physical iPhone lock-screen behavior must be checked on-device.
+
 ## Start locally
 
 Requires Node **22.12+** (or 24+) and npm. On this Mac, Homebrew's Node is at `/opt/homebrew/bin`; an older `/usr/local/bin/node` may otherwise take precedence.
