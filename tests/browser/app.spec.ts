@@ -17,10 +17,10 @@ test('private sample, controls, persistence, sounds, exports and offline shell',
   await page.locator('#timed-mode').click();await page.locator('#repeats').selectOption('custom');await page.locator('#custom-repeats').fill('5');await page.locator('#custom-repeats').dispatchEvent('change');
   const file=page.waitForEvent('download');await page.locator('#export-data').click();expect((await file).suggestedFilename()).toBe('practice.dataset.json');
   await page.waitForTimeout(400);await page.reload();await expect(page.locator('#size')).toHaveValue('scene');await expect(page.locator('#custom-repeats')).toHaveValue('5');
-  await page.locator('#session-tab').click();await expect(page.locator('#session-play')).toBeDisabled();
+  await expect(page.locator('#session-view')).toBeHidden();await expect(page.locator('.mode-tabs')).toHaveCount(0);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:'test-results/mobile-session.png',fullPage:true});
-  await page.locator('#interactive-tab').click();await page.screenshot({path:'test-results/mobile-practice.png',fullPage:true});
+  await page.screenshot({path:'test-results/mobile-practice.png',fullPage:true});
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;});await page.waitForFunction(()=>navigator.serviceWorker.controller!==null);await context.setOffline(true);await page.reload();
   await expect(page.locator('#document-count'),JSON.stringify({errors,html:await page.content()})).toContainText('2 scenes');
   expect(external).toEqual([]);expect(errors).toEqual([]);
@@ -46,27 +46,32 @@ test('imported clips play privately and manual Next starts the next cell',async(
 });
 test('prepared session imports, plays, seeks and exports',async({page})=>{
   mkdirSync('test-results',{recursive:true});const file='test-results/session-fixture.m4a';execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','sine=frequency=110:duration=5','-c:a','aac',file]);
-  const manifest={version:1,kind:'session',fingerprint:await fingerprint(audioData),voice:'Test session',rate:1,duration:5,timings:[{start:0,end:2,segmentId:'r1.line.0',unitId:'r1.line',repeat:0}]};
+  const manifest={version:1,kind:'session',fingerprint:await fingerprint(audioData),voice:'Test session',rate:1,duration:5,timings:[{start:0,end:2,segmentId:'r1.line.0',unitId:'r1.line',repeat:0},{start:4,end:4.5,segmentId:'r1.scenario.0',unitId:'r1.scenario',repeat:0}]};
   const bytes=zipSync({'dataset.json':strToU8(JSON.stringify(audioData)),'manifest.json':strToU8(JSON.stringify(manifest)),'session.m4a':new Uint8Array(readFileSync(file))});
-  await page.goto('/');await page.locator('#import-file').setInputFiles({name:'session.theatre.zip',mimeType:'application/zip',buffer:Buffer.from(bytes)});await page.locator('#confirm-import').click();await expect(page.locator('#session-view')).toBeVisible();await page.locator('#session-play').click();await expect(page.locator('#session-play')).toContainText('Pause');await expect(page.locator('#session-caption')).toContainText('One quiet breath');
-  await page.locator('audio').evaluate((a:HTMLAudioElement)=>{a.currentTime=3});await expect(page.locator('#session-caption')).toContainText('visualize');await page.locator('#session-play').click();await expect(page.locator('#session-play')).toContainText('Play');
-  await page.locator('#interactive-tab').click();
+  await page.goto('/');await page.locator('#import-file').setInputFiles({name:'session.theatre.zip',mimeType:'application/zip',buffer:Buffer.from(bytes)});await page.locator('#confirm-import').click();await expect(page.locator('#session-view')).toBeVisible();await page.locator('#play').click();await expect(page.locator('#play')).toContainText('Pause');await expect(page.locator('#session-caption')).toContainText('One quiet breath');
+  await page.locator('audio').evaluate((a:HTMLAudioElement)=>{a.currentTime=3});await expect(page.locator('#session-caption')).toContainText('visualize');await page.locator('#play').click();await expect(page.locator('#play')).toContainText('Play');
+  await page.locator('#next').click();expect(await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeCloseTo(4,1);
+  await page.locator('#previous').click();expect(await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeCloseTo(0,1);
+  await expect(page.locator('#interactive-tab')).toHaveCount(0);
   await page.locator('#play').click();await expect(page.locator('#session-view')).toBeVisible();
-  await expect(page.locator('#session-play')).toContainText('Pause');await page.locator('#session-play').click();
-  // Even if the last visit was to the editing controls, the next launch is ready to listen.
-  await page.locator('#interactive-tab').click();
+  await expect(page.locator('#play')).toContainText('Pause');await page.locator('#play').click();
+  // The ordinary player remains the native continuous player after reopening.
+  await expect(page.locator('#session-tab')).toHaveCount(0);
   await page.reload();await expect(page.locator('#session-view')).toBeVisible();
-  await page.locator('#session-play').click();await expect(page.locator('#session-play')).toContainText('Pause');
+  await page.locator('#play').click();await expect(page.locator('#play')).toContainText('Pause');
   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('pagehide'));});
   expect(await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.paused)).toBe(false);
-  await page.locator('#session-play').click();
+  const hiddenTime=await page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime);
+  await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeGreaterThan(hiddenTime+.2);
+  await page.locator('#play').click();
+  await page.getByText('Audio details',{exact:true}).click();
   const dl=page.waitForEvent('download');await page.locator('#export-audio').click();expect((await dl).suggestedFilename()).toBe('theatre-session.m4a');
 });
 test('generated personal packs import and play without publishing their content',async({page})=>{
   test.setTimeout(120_000);
   test.skip(!process.env.THEATRE_AUDIO_DIR,'Optional local artifact check; personal files are never fixtures.');
   await page.goto('/');await page.locator('#import-file').setInputFiles(`${process.env.THEATRE_AUDIO_DIR}/voice.theatre.zip`);await page.locator('#confirm-import').click();await expect(page.locator('#dialog')).not.toBeVisible();await page.reload();await expect(page.locator('#document-count')).toContainText('41 scenes');await expect(page.locator('#engine-label')).toContainText('af_heart');await page.locator('#play').click();await expect(page.locator('#player-status')).toContainText('Listening');await page.locator('#play').click();await expect(page.locator('#player-status')).toContainText('Paused');
-  await page.locator('#import-file').setInputFiles(`${process.env.THEATRE_AUDIO_DIR}/session.theatre.zip`);await page.locator('#confirm-import').click();await expect(page.locator('#session-details')).toContainText('16 minutes');expect(await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>(await fetch(a.src)).headers.get('Content-Type'))).toBe('audio/wav');await page.locator('#session-play').click();await expect(page.locator('#session-play')).toContainText('Pause');await page.locator('#session-play').click();
+  await page.locator('#import-file').setInputFiles(`${process.env.THEATRE_AUDIO_DIR}/session.theatre.zip`);await page.locator('#confirm-import').click();await expect(page.locator('#session-details')).toContainText('16 minutes');expect(await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>(await fetch(a.src)).headers.get('Content-Type'))).toBe('audio/wav');await page.locator('#play').click();await expect(page.locator('#play')).toContainText('Pause');await page.locator('#play').click();
 });
 
 test('cached background sounds support Safari byte ranges and play offline',async({page,context})=>{
@@ -118,7 +123,7 @@ test('music stays on one audio source across narration and unit navigation',asyn
   await page.locator('#next').click();await expect(page.locator('#player-status')).toContainText('Tap Next');
   await page.waitForTimeout(17000); // Cross the full bundled sound loop boundary.
   expect(await page.evaluate(()=>(window as unknown as {loopStats:unknown}).loopStats)).toEqual({starts:1,stops:0});
-  await page.locator('#session-tab').click();
+  await page.locator('#repeat').click();await page.locator('#play').click();
   expect(await page.evaluate(()=>(window as unknown as {loopStats:unknown}).loopStats)).toEqual({starts:1,stops:1});
 });
 
@@ -132,7 +137,7 @@ test('existing ducked session is automatically remixed with continuous music and
   const pack=zipSync({'dataset.json':strToU8(JSON.stringify(audioData)),'manifest.json':strToU8(JSON.stringify(manifest)),'session.m4a':new Uint8Array([0])});
   await page.locator('#import-file').setInputFiles({name:'session.theatre.zip',mimeType:'application/zip',buffer:Buffer.from(pack)});await page.locator('#confirm-import').click();
   await expect(page.locator('#session-view')).toBeVisible();
-  await page.reload();await expect(page.locator('#session-view')).toBeVisible();await page.locator('#session-play').click();await expect(page.locator('#session-play')).toContainText('Pause');
+  await page.reload();await expect(page.locator('#session-view')).toBeVisible();await page.locator('#play').click();await expect(page.locator('#play')).toContainText('Pause');
   const music=await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>{
     const context=new OfflineAudioContext(1,1,22050),buffer=await context.decodeAudioData(await (await fetch(a.src)).arrayBuffer());
     const samples=buffer.getChannelData(0),rms=[];
@@ -143,5 +148,6 @@ test('existing ducked session is automatically remixed with continuous music and
     return {duration:buffer.duration,rms};
   });
   expect(music.duration).toBeCloseTo(35,1);for(const rms of music.rms)expect(rms).toBeGreaterThan(.005);
+  await page.getByText('Audio details',{exact:true}).click();
   const downloaded=page.waitForEvent('download');await page.locator('#export-audio').click();expect((await downloaded).suggestedFilename()).toBe('theatre-session.wav');
 });
