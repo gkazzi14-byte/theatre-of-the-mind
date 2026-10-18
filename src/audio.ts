@@ -5,7 +5,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import {playForeground} from './foreground-audio';
 
 export interface Timing {start:number;end:number;segmentId:string;unitId:string;repeat:number}
-export interface PackManifest {version:1;kind:'voice'|'session';fingerprint:string;voice:string;rate:number;clips?:Record<string,string>;timings?:Timing[];duration?:number;settings?:Settings}
+export interface PackManifest {audioFile?:'session.wav'|'session.m4a';version:1;kind:'voice'|'session';fingerprint:string;voice:string;rate:number;clips?:Record<string,string>;timings?:Timing[];duration?:number;settings?:Settings}
 export interface AudioPack {manifest:PackManifest;data:Dataset;files:Record<string,Blob>}
 export interface StoredAudioPack {manifest:PackManifest;data:Dataset;files:Record<string,{bytes:ArrayBuffer;type:string}|Blob>}
 export async function storePack(pack:AudioPack|undefined):Promise<StoredAudioPack|undefined>{
@@ -29,9 +29,11 @@ export async function readPack(bytes:Uint8Array):Promise<AudioPack>{
     if(!m.clips||!Object.keys(m.clips).length)throw Error('The voice pack has no clips.');
     for(const [id,path]of Object.entries(m.clips)){if(!ids.has(id)||typeof path!=='string'||!/^clips\/[a-zA-Z0-9_.-]+\.(wav|m4a)$/.test(path)||!raw[path])throw Error('Voice pack has missing or invalid clips.');files[path]=new Blob([raw[path] as BlobPart],{type:path.endsWith('.m4a')?'audio/mp4':'audio/wav'});}
   }else{
-    if(!raw['session.m4a']||!Number.isFinite(m.duration)||m.duration!<=0||!Array.isArray(m.timings)||!m.timings.length)throw Error('Session audio or timing data is missing.');
+    const audioFile=m.audioFile||'session.m4a';
+    if(!['session.m4a','session.wav'].includes(audioFile))throw Error('Session audio format is invalid.');
+    if(!raw[audioFile]||!Number.isFinite(m.duration)||m.duration!<=0||!Array.isArray(m.timings)||!m.timings.length)throw Error('Session audio or timing data is missing.');
     let end=0;for(const t of m.timings){if(!ids.has(t.segmentId)||typeof t.unitId!=='string'||!Number.isFinite(t.start)||!Number.isFinite(t.end)||t.start<end-.01||t.end<=t.start||t.end>m.duration!+.1||!Number.isInteger(t.repeat)||t.repeat<0)throw Error('Session timing data is invalid.');end=t.end;}
-    files['session.m4a']=new Blob([raw['session.m4a'] as BlobPart],{type:'audio/mp4'});
+    files[audioFile]=new Blob([raw[audioFile] as BlobPart],{type:audioFile.endsWith('.wav')?'audio/wav':'audio/mp4'});
   }
   return {manifest:m,data,files};
 }

@@ -106,10 +106,11 @@ async function main(){
   else if(settings.background!=='off'){if(!SOUNDS.some(s=>s[0]===settings.background))throw Error('Unknown background.');background=path.join(ROOT,'public','audio',settings.background+'.wav');}
   const sessionFile=path.join(output,'session.m4a');const fade=`afade=t=in:d=1.5,afade=t=out:st=${Math.max(0,time-3)}:d=3,alimiter=limit=0.85:level=false`;
   if(background){
-    const mix=settings.duck?`[0:a]asplit=2[voice][side];[voice]volume=${settings.voiceVolume}[v];[1:a]volume=${settings.musicVolume}[bg];[bg][side]sidechaincompress=threshold=0.025:ratio=4:attack=100:release=1200[m];[v][m]amix=inputs=2:duration=first:normalize=0,${fade}[out]`:`[0:a]volume=${settings.voiceVolume}[v];[1:a]volume=${settings.musicVolume}[bg];[v][bg]amix=inputs=2:duration=first:normalize=0,${fade}[out]`;
+    // Keep the music bed steady across speech and visualization gaps.
+    const mix=`[0:a]volume=${settings.voiceVolume}[v];[1:a]volume=${settings.musicVolume}[bg];[v][bg]amix=inputs=2:duration=first:normalize=0,${fade}[out]`;
     ffmpeg(['-i',narration,'-stream_loop','-1','-i',path.resolve(background),'-filter_complex',mix,'-map','[out]','-t',String(time),'-ac','2','-ar','44100','-c:a','aac','-b:a','128k','-movflags','+faststart',sessionFile]);
   }else ffmpeg(['-i',narration,'-af',`volume=${settings.voiceVolume},${fade}`,'-ac','2','-ar','44100','-c:a','aac','-b:a','128k','-movflags','+faststart',sessionFile]);
-  const manifest={...common,kind:'session',duration:duration(sessionFile),timings,settings};
+  const manifest={...common,kind:'session',duration:duration(sessionFile),timings,settings:{...settings,duck:false}};
   await writeFile(path.join(output,'session.theatre.zip'),zipSync({'dataset.json':dataset,'manifest.json':strToU8(JSON.stringify(manifest)),'session.m4a':new Uint8Array(await readFile(sessionFile))},{level:0}));
   await writeFile(path.join(output,'session-manifest.json'),JSON.stringify(manifest,null,2));
   console.log(`Done: ${units.length} units, ${settings.repeats} reading(s), ${Math.round(time/60)} minutes.\nImport voice.theatre.zip for interactive practice.\nImport session.theatre.zip for locked-screen listening.\nPrivate output: ${output}`);

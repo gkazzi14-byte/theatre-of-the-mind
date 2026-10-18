@@ -12,6 +12,21 @@ self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(c
 self.addEventListener('message',event=>{if(event.data==='ACTIVATE')self.skipWaiting()});
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('theatre-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==self.location.origin)return;
-event.respondWith(caches.open(CACHE).then(async cache=>{const hit=await cache.match(event.request,{ignoreVary:true});if(hit)return hit;if(event.request.mode==='navigate')return (await cache.match(new URL('index.html',self.registration.scope).href,{ignoreVary:true}))||fetch(event.request);return fetch(event.request)}));});
+event.respondWith(caches.open(CACHE).then(async cache=>{const hit=await cache.match(event.request,{ignoreVary:true});if(hit){
+const range=event.request.headers.get('range');
+if(range&&new URL(event.request.url).pathname.endsWith('.wav')){
+  const bytes=await hit.arrayBuffer(),size=bytes.byteLength;
+  const match=/^bytes=(\\d*)-(\\d*)$/.exec(range);
+  if(match&&(match[1]||match[2])){
+    const start=match[1]?Number(match[1]):Math.max(0,size-Number(match[2]));
+    const end=match[1]?(match[2]?Math.min(Number(match[2]),size-1):size-1):size-1;
+    if(start>=size||start>end)return new Response(null,{status:416,headers:{'Content-Range':'bytes */'+size}});
+    const headers=new Headers(hit.headers);headers.set('Content-Range','bytes '+start+'-'+end+'/'+size);headers.set('Content-Length',String(end-start+1));headers.set('Accept-Ranges','bytes');
+    return new Response(bytes.slice(start,end+1),{status:206,headers});
+  }
+  return new Response(bytes,{status:200,headers:hit.headers});
+}
+return hit;
+}if(event.request.mode==='navigate')return (await cache.match(new URL('index.html',self.registration.scope).href,{ignoreVary:true}))||fetch(event.request);return fetch(event.request)}));});
 `);
 console.log(`Deployment check passed: ${files.length} public assets; offline cache ${version}.`);

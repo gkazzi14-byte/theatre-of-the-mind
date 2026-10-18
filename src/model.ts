@@ -13,7 +13,7 @@ export interface Settings {
   background: string; musicVolume: number; voiceVolume: number; duck: boolean; loop: boolean;
   voice: string; neuralVoice: string; favorites: string[];
 }
-export const defaults: Settings = {size:'cell',range:'section',section:'',scene:'',mode:'manual',affirmations:false,gap:30,rate:1,repeats:1,background:'off',musicVolume:.16,voiceVolume:1,duck:true,loop:false,voice:'',neuralVoice:'af_heart',favorites:[]};
+export const defaults: Settings = {size:'cell',range:'section',section:'',scene:'',mode:'manual',affirmations:false,gap:30,rate:1,repeats:1,background:'off',musicVolume:.16,voiceVolume:1,duck:false,loop:false,voice:'',neuralVoice:'af_heart',favorites:[]};
 export interface Segment {id:string; text:string; sectionId:string; sceneId:string; field:Field}
 export interface Unit {id:string; label:string; segments:Segment[]}
 export function sentences(text:string):string[] {

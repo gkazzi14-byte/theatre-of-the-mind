@@ -35,7 +35,7 @@ You can use a private local network instead: run `npm run dev`, put Mac and iPho
 - **Wait for Next** reads one unit then waits. **Timed pause** adds your visualization gap and advances automatically.
 - **Affirmations only** reads the Line column within your selected range.
 - Repeat a unit now, choose 1–20 readings per unit, or loop a timed practice.
-- All twelve bundled backgrounds are original synthesized sounds. The four nature-inspired options imitate rain, surf, running water and forest wind; they are not recordings. Preview, favorite, or import your own music. Noise colors are approximate sound textures, not clinical/calibrated generators.
+- All twelve bundled backgrounds are original synthesized sounds. The four nature-inspired options imitate rain, surf, running water and forest wind; they are not recordings. Preview, favorite, or import your own music. Interactive music uses a decoded looping buffer at steady volume, without restarting between sentences or Next actions. Noise colors are approximate sound textures, not clinical/calibrated generators.
 - Music continues through visualization gaps and manual waiting. Explicit Pause stops both. Interactive practice pauses when the app is hidden.
 - Imported neural clips take priority over browser speech. Without them, only English voices reported as local by the browser are eligible. Voice quality and availability depend on the device; Siri's voice is not guaranteed to be exposed to websites.
 
@@ -70,9 +70,9 @@ Generation can take several minutes for a full document. Cached sentences are re
 
 AirDrop both ZIP packs to iPhone Files, then import them individually in the app. Packs include the matching dataset; importing a different document asks you to confirm replacement and removes mismatched packs. Keep original packs in Files as backups.
 
-For screen-locked listening, open that tab, start the prepared session, then lock your screen. Play/pause and seek are exposed through the browser's supported media controls. Timing and music are baked in, so the phone need not run background speech synthesis or JavaScript timers. Calls, power policies, memory pressure, browser versions and other media can still interrupt playback. Playback cannot continue with the phone powered down. Looping uses the media element's native loop capability and also needs a device check.
+Once a prepared session is imported, the app opens ready to listen and the main Play button automatically uses that continuous track. No background-playback setting or mode selection is required; tap Play, then lock your screen. Without a prepared session, interactive speech still pauses when hidden. Play/pause and seek are exposed through the browser's supported media controls. Timing and music are baked in, so the phone need not run background speech synthesis or JavaScript timers. Calls, power policies, memory pressure, browser versions and other media can still interrupt playback. Playback cannot continue with the phone powered down. Looping uses the media element's native loop capability and also needs a device check.
 
-Changing a prepared session's voice, rate, background, mix, pauses or repeat count requires a new recipe and regeneration. Interactive controls do not alter a prepared mix. You can use the audio player's scrubber or Restart in the session view.
+Existing sessions with narration ducking are automatically remixed at steady music volume on this device when a matching voice pack and the original background are available. This repair supports sessions up to 30 minutes and is saved locally; longer sessions or sessions without source clips keep their existing audio. Changing a prepared session's voice, rate, background, mix, pauses or repeat count otherwise requires a new recipe and regeneration. Interactive controls do not alter a prepared mix. You can use the audio player's scrubber or Restart in the session view.
 
 ## Privacy and storage
 

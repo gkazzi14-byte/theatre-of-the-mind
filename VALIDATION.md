@@ -1,5 +1,15 @@
 # Validation
 
+## Phone playback update — 18 October 2026
+
+- Production build and 13 synthetic core tests passed (the optional source-document test was not run in this pass).
+- All 16 synthetic browser checks passed across Chromium and desktop WebKit. New checks cover cached byte-range responses, automatic prepared-session selection, continued native playback through simulated hide events, a single background source across narration/Next and a complete loop boundary, and automatic steady-music remix/persistence.
+- Both additional real-pack browser checks passed locally. The existing 16-minute session remixed to a single WAV and played in both browsers; personal files remain excluded from deployment.
+- Audio samples from the synthetic remixed track remain non-silent across music loop boundaries and visualization gaps.
+- Interactive music now loops decoded PCM with constant gain. The native continuous session remains independent of the foreground AudioContext. No real iPhone lock-screen test was possible here.
+
+## Original validation
+
 Verified on this Mac on 17 October 2026.
 
 - Production TypeScript check and Vite build passed. The deployable app is approximately 8.2 MB including all twelve offline soundscapes.
