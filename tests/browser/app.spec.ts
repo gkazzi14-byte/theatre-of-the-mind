@@ -37,12 +37,29 @@ test('repository subpath installs offline and Focus hides secondary controls',as
 
 const audioData:Dataset={version:1,title:'Audio test',guidance:[],sections:[{id:'s1',title:'Quiet practice',scenes:[{id:'r1',number:1,line:'One quiet breath.',scenario:'A calm room.',reaction:'Let your shoulders soften.',pivot:'Notice the stillness.'}]}]};
 function wav(){const count=12000,b=Buffer.alloc(44+count*2);b.write('RIFF');b.writeUInt32LE(b.length-8,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(24000,24);b.writeUInt32LE(48000,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(count*2,40);for(let i=0;i<count;i++)b.writeInt16LE(Math.round(Math.sin(i*.05)*500),44+i*2);return b;}
-test('imported clips play privately and manual Next starts the next cell',async({page})=>{
+test('a voice pack automatically becomes continuous audio and survives screen hiding',async({page,context})=>{
+  await page.addInitScript(()=>{OfflineAudioContext.prototype.startRendering=()=>new Promise(()=>{});});
   await page.goto('/');const clips:Record<string,string>={},files:Record<string,Uint8Array>={};for(const [i,s]of segmentsFor(audioData).entries()){clips[s.id]=`clips/${i}.wav`;files[clips[s.id]]=wav();}
   const bytes=zipSync({...files,'dataset.json':strToU8(JSON.stringify(audioData)),'manifest.json':strToU8(JSON.stringify({version:1,kind:'voice',fingerprint:await fingerprint(audioData),voice:'Test local clips',rate:1,clips}))});
   await page.locator('#import-file').setInputFiles({name:'voice.theatre.zip',mimeType:'application/zip',buffer:Buffer.from(bytes)});await page.locator('#confirm-import').click();
-  await expect(page.locator('#engine-label')).toContainText('Local neural audio');await page.locator('#play').click();await expect(page.locator('#player-status')).toContainText('Tap Next');await page.locator('#next').click();await expect(page.locator('#scene-content')).toContainText('A calm room.');await expect(page.locator('#player-status')).toContainText('Tap Next');
-  await page.locator('#repeat').click();await expect(page.locator('#player-status')).toContainText('Listening');await page.locator('#play').click();await expect(page.locator('#player-status')).toContainText('Paused');
+  await expect(page.locator('#session-view')).toBeVisible();await expect(page.locator('#play')).toBeEnabled();
+  await page.locator('[data-sound="warm"]').click();await page.locator('#gap').fill('10');await page.locator('#gap').dispatchEvent('input');
+  await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.duration)).toBeLessThan(50);
+  const gapRms=await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>{
+    const decoder=new OfflineAudioContext(1,1,22050),buffer=await decoder.decodeAudioData(await (await fetch(a.src)).arrayBuffer()),pcm=buffer.getChannelData(0);
+    return [2,16,32].map(second=>{const start=Math.floor(second*buffer.sampleRate),length=1100;let sum=0;for(let i=start;i<start+length;i++)sum+=pcm[i]*pcm[i];return Math.sqrt(sum/length);});
+  });
+  for(const rms of gapRms)expect(rms).toBeGreaterThan(.005);
+  await page.locator('#play').click();await expect(page.locator('#play')).toContainText('Pause');
+  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('pagehide'));});
+  await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeGreaterThan(.8);
+  // Seek past the first visualization gap while hidden: narration is already
+  // in the same file, so no hidden JavaScript has to start a new clip.
+  await page.locator('audio').evaluate((a:HTMLAudioElement)=>{a.currentTime=11;});
+  await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeGreaterThan(11.2);
+  await page.locator('#play').click();
+  await page.evaluate(async()=>{await navigator.serviceWorker.ready});await page.waitForFunction(()=>!!navigator.serviceWorker.controller);await context.setOffline(true);await page.reload();
+  await expect(page.locator('#play')).toBeEnabled();await expect(page.locator('#engine-label')).toContainText('continuous audio');
 });
 test('prepared session imports, plays, seeks and exports',async({page})=>{
   mkdirSync('test-results',{recursive:true});const file='test-results/session-fixture.m4a';execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','sine=frequency=110:duration=5','-c:a','aac',file]);
@@ -70,7 +87,7 @@ test('prepared session imports, plays, seeks and exports',async({page})=>{
 test('generated personal packs import and play without publishing their content',async({page})=>{
   test.setTimeout(120_000);
   test.skip(!process.env.THEATRE_AUDIO_DIR,'Optional local artifact check; personal files are never fixtures.');
-  await page.goto('/');await page.locator('#import-file').setInputFiles(`${process.env.THEATRE_AUDIO_DIR}/voice.theatre.zip`);await page.locator('#confirm-import').click();await expect(page.locator('#dialog')).not.toBeVisible();await page.reload();await expect(page.locator('#document-count')).toContainText('41 scenes');await expect(page.locator('#engine-label')).toContainText('af_heart');await page.locator('#play').click();await expect(page.locator('#player-status')).toContainText('Listening');await page.locator('#play').click();await expect(page.locator('#player-status')).toContainText('Paused');
+  await page.goto('/');await page.locator('#import-file').setInputFiles(`${process.env.THEATRE_AUDIO_DIR}/voice.theatre.zip`);await page.locator('#confirm-import').click();await expect(page.locator('#dialog')).not.toBeVisible();await page.reload();await expect(page.locator('#document-count')).toContainText('41 scenes');await expect(page.locator('#engine-label')).toContainText('af_heart');await page.locator('#play').click();await expect(page.locator('#player-status')).toContainText('Listening');await page.locator('#play').click();await expect(page.locator('#play')).toContainText('Play');
   await page.locator('#import-file').setInputFiles(`${process.env.THEATRE_AUDIO_DIR}/session.theatre.zip`);await page.locator('#confirm-import').click();await expect(page.locator('#session-details')).toContainText('16 minutes');expect(await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>(await fetch(a.src)).headers.get('Content-Type'))).toBe('audio/mp4');await page.locator('#play').click();await expect(page.locator('#play')).toContainText('Pause');await page.locator('#play').click();
 });
 
@@ -103,27 +120,16 @@ test('cached background sounds support Safari byte ranges and play offline',asyn
   await expect(page.locator('#notice')).not.toContainText('could not start');
 });
 
-test('music stays on one audio source across narration and unit navigation',async({page})=>{
+test('background preview stays on one source across the full loop',async({page})=>{
   await page.addInitScript(()=>{
-    const create=AudioContext.prototype.createBufferSource;
-    const stats={starts:0,stops:0};
+    const create=AudioContext.prototype.createBufferSource;const stats={starts:0,stops:0};
     (window as unknown as {loopStats:typeof stats}).loopStats=stats;
-    AudioContext.prototype.createBufferSource=function(){
-      const source=create.call(this),start=source.start.bind(source),stop=source.stop.bind(source);
-      source.start=(...args)=>{stats.starts++;start(...args)};
-      source.stop=(...args)=>{stats.stops++;stop(...args)};
-      return source;
-    };
+    AudioContext.prototype.createBufferSource=function(){const source=create.call(this),start=source.start.bind(source),stop=source.stop.bind(source);source.start=(...args)=>{stats.starts++;start(...args)};source.stop=(...args)=>{stats.stops++;stop(...args)};return source;};
   });
-  await page.goto('/');const clips:Record<string,string>={},files:Record<string,Uint8Array>={};
-  for(const [i,s]of segmentsFor(audioData).entries()){clips[s.id]=`clips/${i}.wav`;files[clips[s.id]]=wav();}
-  const bytes=zipSync({...files,'dataset.json':strToU8(JSON.stringify(audioData)),'manifest.json':strToU8(JSON.stringify({version:1,kind:'voice',fingerprint:await fingerprint(audioData),voice:'Test clips',rate:1,clips}))});
-  await page.locator('#import-file').setInputFiles({name:'voice.theatre.zip',mimeType:'application/zip',buffer:Buffer.from(bytes)});await page.locator('#confirm-import').click();
-  await page.locator('[data-sound="warm"]').click();await page.locator('#play').click();await expect(page.locator('#player-status')).toContainText('Tap Next');
-  await page.locator('#next').click();await expect(page.locator('#player-status')).toContainText('Tap Next');
-  await page.waitForTimeout(17000); // Cross the full bundled sound loop boundary.
+  await page.goto('/');await page.locator('#demo').click();await page.locator('[data-sound="warm"]').click();await page.locator('#preview-sound').click();
+  await page.waitForTimeout(17000);
   expect(await page.evaluate(()=>(window as unknown as {loopStats:unknown}).loopStats)).toEqual({starts:1,stops:0});
-  await page.locator('#repeat').click();await page.locator('#play').click();
+  await page.locator('#preview-sound').click();
   expect(await page.evaluate(()=>(window as unknown as {loopStats:unknown}).loopStats)).toEqual({starts:1,stops:1});
 });
 
@@ -148,4 +154,11 @@ test('phone startup and import do not wait for audio rendering or replace the or
   await expect.poll(()=>page.locator('audio').evaluate((a:HTMLAudioElement)=>a.currentTime)).toBeGreaterThan(.2);
   const saved=await page.locator('audio').evaluate(async(a:HTMLAudioElement)=>Array.from(new Uint8Array(await (await fetch(a.src)).arrayBuffer())));
   expect(Buffer.from(saved)).toEqual(original);
+});
+
+test('Safari still shows a recovery screen when the application script fails to load',async({page})=>{
+  await page.route('**/assets/index-*.js',route=>route.abort());
+  await page.goto('/');await expect(page.getByRole('heading',{name:'Theatre of the Mind'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Reload player'})).toBeVisible();
+  await expect(page.locator('#startup-message')).toContainText('could not load');
 });

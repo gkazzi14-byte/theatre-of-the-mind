@@ -1,5 +1,9 @@
 # Validation
 
+## Automatic continuous player — 18 October 2026
+
+Voice-only imports now automatically produce a continuous native track. PCM mixing runs in a bounded worker without `OfflineAudioContext.startRendering`, while the app remains visible. Original imports are preserved. Automated coverage includes voice-only conversion, music present during gaps and across loop boundaries, hidden-page playback advancing beyond the next narration segment, offline reconstruction, and a visible recovery screen when the application module cannot load. Native Media Session actions include play/pause, previous/next and position updates. Physical iPhone lock-screen behavior is still not verified here.
+
 ## Startup recovery — 18 October 2026
 
 A regression test reproduced import/startup blocking when offline audio rendering never completed. Automatic session remixing has been removed from startup and import. Existing native audio is played directly, and importing a session preserves its original bytes. This addresses the reproduced blocking path; the user's exact device failure has not yet been confirmed.

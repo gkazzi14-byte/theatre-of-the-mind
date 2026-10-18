@@ -5,7 +5,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import {playForeground} from './foreground-audio';
 
 export interface Timing {start:number;end:number;segmentId:string;unitId:string;repeat:number}
-export interface PackManifest {audioFile?:'session.wav'|'session.m4a';version:1;kind:'voice'|'session';fingerprint:string;voice:string;rate:number;clips?:Record<string,string>;timings?:Timing[];duration?:number;settings?:Settings}
+export interface PackManifest {generated?:boolean;audioFile?:'session.wav'|'session.m4a';version:1;kind:'voice'|'session';fingerprint:string;voice:string;rate:number;clips?:Record<string,string>;timings?:Timing[];duration?:number;settings?:Settings}
 export interface AudioPack {manifest:PackManifest;data:Dataset;files:Record<string,Blob>}
 export interface StoredAudioPack {manifest:PackManifest;data:Dataset;files:Record<string,{bytes:ArrayBuffer;type:string}|Blob>}
 export async function storePack(pack:AudioPack|undefined):Promise<StoredAudioPack|undefined>{
