@@ -13,3 +13,13 @@ test-results/
 *.m4a
 *.wav
 !public/audio/*.wav
+
+# Capacitor copies only the checked web build here during ios:sync.
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/App/DerivedData/
+ios/App/build/
+*.xcuserstate
+xcuserdata/
+.swiftpm/

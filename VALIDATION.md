@@ -1,5 +1,30 @@
 # Validation
 
+## Native iPhone app and installation — 18 October 2026
+
+Added a Capacitor iOS project with a Swift audio plugin. Native file playback,
+loops, lock-screen play/pause/seek/unit navigation, interruption handling and
+headphone removal operate independently of JavaScript. File transfers use
+192 KiB chunks, and native temporary audio is readable while the device is
+locked after its first unlock. Deleting local data also clears native audio.
+Backups and audio exports use the iOS share sheet.
+
+The build and Capacitor sync pass. Seventeen unit tests pass (one optional
+document check skipped), including transfer byte integrity, bounds, cancellation,
+control ordering, native-state changes and transfer errors. Twenty-two browser
+checks pass across Chromium and desktop WebKit (two optional personal-pack
+checks skipped), including installation guidance, standalone launch, exports,
+offline imports and simulated hidden-page continuous playback. Plist/project
+syntax checks pass. The GitHub Mac workflow successfully compiled an unsigned
+iOS Simulator app. Scene startup uses the custom bridge controller that
+registers the audio plugin; native session IDs also work on custom URL schemes.
+
+This Mac has Command Line Tools, but no full Xcode or iPhone SDK. The native
+binary cannot be built or installed locally yet. Neither desktop hide events
+nor a simulator build verify physical iPhone power-button behavior. The user's
+reported interruption is not yet verified as fixed on their phone. Follow
+`ios/README.md` for installation and the physical-device acceptance check.
+
 ## Automatic continuous player — 18 October 2026
 
 Voice-only imports now automatically produce a continuous native track. PCM mixing runs in a bounded worker without `OfflineAudioContext.startRendering`, while the app remains visible. Original imports are preserved. Automated coverage includes voice-only conversion, music present during gaps and across loop boundaries, hidden-page playback advancing beyond the next narration segment, offline reconstruction, and a visible recovery screen when the application module cannot load. Native Media Session actions include play/pause, previous/next and position updates. Physical iPhone lock-screen behavior is still not verified here.
